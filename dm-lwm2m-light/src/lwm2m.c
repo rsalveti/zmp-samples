@@ -68,6 +68,9 @@ static char ep_name[LWM2M_DEVICE_ID_SIZE];
 extern struct device *flash_dev;
 static struct lwm2m_ctx app_ctx;
 
+/* storage location for firmware package */
+static u8_t firmware_buf[CONFIG_LWM2M_COAP_BLOCK_SIZE];
+
 /*
  * TODO: Find a better way to handle update markers, and if possible
  * identify a common solution that could also be shared with hawkbit
@@ -182,6 +185,12 @@ cleanup:
 	return ret;
 }
 
+static void *firmware_get_buf(u16_t obj_inst_id, size_t *data_len)
+{
+	*data_len = sizeof(firmware_buf);
+	return firmware_buf;
+}
+
 static int firmware_block_received_cb(u16_t obj_inst_id,
 				      u8_t *data, u16_t data_len,
 				      bool last_block, size_t total_size)
@@ -263,8 +272,8 @@ static int lwm2m_setup(void)
 	char device_serial_no[10];
 	int ret;
 
-	snprintf(device_serial_no, sizeof(device_serial_no), "%08x",
-			product_id->number);
+	snprintk(device_serial_no, sizeof(device_serial_no), "%08x",
+		 product_id->number);
 	/* Check if there is a valid device id stored in the device */
 	ret = lwm2m_get_device_id(flash_dev, ep_name);
 	if (ret) {
@@ -289,6 +298,8 @@ static int lwm2m_setup(void)
 	lwm2m_engine_set_u32("3/0/21", (int) (FLASH_BANK_SIZE / 1024));
 
 	/* Firmware Object callbacks */
+	/* setup data buffer for block-wise transfer */
+	lwm2m_engine_register_pre_write_callback("5/0/0", firmware_get_buf);
 	lwm2m_firmware_set_write_cb(firmware_block_received_cb);
 	lwm2m_firmware_set_update_cb(firmware_update_cb);
 
@@ -493,7 +504,7 @@ static void lwm2m_reg_update_result(struct k_work *work)
 	TC_PRINT("Update LwM2M registration\n");
 	for (i = 0; i < data->tc_count; i++) {
 		result = data->tc_results[i];
-		snprintf(result_name, sizeof(result_name), "%s_%zu",
+		snprintk(result_name, sizeof(result_name), "%s_%zu",
 			 __func__, i);
 		if (result == TC_FAIL) {
 			final_result = TC_FAIL;
